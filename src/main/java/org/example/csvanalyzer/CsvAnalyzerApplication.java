@@ -8,6 +8,6 @@ public class CsvAnalyzerApplication {
 
     public static void main(String[] args) {
         SpringApplication.run(CsvAnalyzerApplication.class, args);
-    }
 
+    }
 }

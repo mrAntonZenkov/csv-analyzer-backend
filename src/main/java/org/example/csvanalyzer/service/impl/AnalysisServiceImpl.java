@@ -6,9 +6,14 @@ import org.example.csvanalyzer.exception.FileProcessingException;
 import org.example.csvanalyzer.exception.RecordNotFoundException;
 import org.example.csvanalyzer.repository.AnalysisRecordRepository;
 import org.example.csvanalyzer.service.AnalysisService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.BufferedReader;
@@ -26,6 +31,7 @@ import java.util.UUID;
 @Service
 public class AnalysisServiceImpl implements AnalysisService {
 
+    private static final Logger log = LoggerFactory.getLogger(AnalysisServiceImpl.class);
     private final AnalysisRecordRepository repository;
     private final Path tempDir;
 
@@ -127,25 +133,48 @@ public class AnalysisServiceImpl implements AnalysisService {
     }
 
     @Override
-    public void deleteById(Long id) {
-        repository.findById(id).orElseThrow(() -> new RecordNotFoundException(id));
+    @Transactional
+    public void deleteById(Long id) throws IOException {
+        AnalysisRecord record = repository.findById(id)
+                .orElseThrow(() -> new RecordNotFoundException(id));
+
+        if (record.getTempFilePath() != null) {
+            Path filePath = Paths.get(record.getTempFilePath());
+            try {
+                Files.deleteIfExists(filePath);
+                log.info("Удален временный файл: {}", filePath);
+            } catch (IOException e) {
+                log.error("Ошибка при удалении файла: {}", filePath, e);
+                throw e;
+            }
+        }
 
         repository.deleteById(id);
+        log.info("Удалена запись анализа с id: {}", id);
     }
 
-    private void maintainLast10() {
+    @Transactional
+    protected void maintainLast10() {
         long count = repository.count();
-        if (count <= 10){
+        if (count <= 10) {
             return;
         }
 
-        List<AnalysisRecord> toDelete = repository.findAll()
-                .stream()
-                .sorted(Comparator.comparingLong(AnalysisRecord::getId))
-                .limit(count - 10)
-                .toList();
+        long recordsToDelete = count - 10;
+        Pageable pageable = PageRequest.of(0, (int) recordsToDelete, Sort.by(Sort.Direction.ASC, "id"));
+        List<AnalysisRecord> toDelete = repository.findAllByOrderByIdAsc(pageable);
+
+        log.info("Удаление {} старых записей для поддержания лимита в 10", toDelete.size());
 
         for (AnalysisRecord r : toDelete) {
+            if (r.getTempFilePath() != null) {
+                try {
+                    Files.deleteIfExists(Paths.get(r.getTempFilePath()));
+                    log.debug("Удален временный файл: {}", r.getTempFilePath());
+                } catch (IOException e) {
+                    log.error("Не удалось удалить файл: {}", r.getTempFilePath(), e);
+                }
+            }
             repository.delete(r);
         }
     }

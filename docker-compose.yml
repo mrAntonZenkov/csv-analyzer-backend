@@ -1,8 +1,0 @@
-services:
-  csv-analyzer:
-    build: .
-    container_name: csv-analyzer
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./tmp:/app/tmp   # временные файлы анализа
