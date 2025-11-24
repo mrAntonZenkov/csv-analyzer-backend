@@ -52,15 +52,14 @@ public class HistoryController {
                     description = "History retrieved successfully"
             )
     })
-    public ResponseEntity<List<HistoryDto>> getHistory(
+    public ResponseEntity<Page<HistoryDto>> getHistory(
             @Parameter(description = "Page number (0-based), default: 0", example = "0")
             @RequestParam(defaultValue = "0") int page) {
         Pageable pageable = PageRequest.of(page, 5, Sort.by(Sort.Direction.DESC, "id"));
         Page<AnalysisRecord> pageResult = analysisService.getHistory(pageable);
 
-        List<HistoryDto> list = pageResult.stream()
-                .map(mapper::toHistoryDto)
-                .toList();
+        Page<HistoryDto> list = pageResult
+                .map(mapper::toHistoryDto);
 
         return ResponseEntity.ok(list);
     }
